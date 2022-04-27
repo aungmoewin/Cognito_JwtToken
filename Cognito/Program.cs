@@ -23,11 +23,11 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                         ValidateIssuer = false,
                         ValidateAudience = false,
                         SignatureValidator = (token, _) => new JwtSecurityToken(token),
-                        //RoleClaimType = "scope",
+//                        RoleClaimType = "scope",
                         NameClaimType = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier",
-                        RoleClaimTypeRetriever = (token, _) =>  
-                           (token as JwtSecurityToken).Claims.Any(c=>c.Type == "token_use" && c.Value == "access") ? "scope" : "cognito:groups"
-                        
+                        RoleClaimTypeRetriever = (token, _) =>
+                           (token as JwtSecurityToken).Claims.Any(c => c.Type == "token_use" && c.Value == "access") ? "scope" : "cognito:groups"
+
 
                         //RequireExpirationTime = true,
                         //RequireSignedTokens = false,
