@@ -15,15 +15,19 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(builder =>
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 .AddJwtBearer(options =>
                 {
-                   // options.RequireHttpsMetadata = false;
+                    // options.RequireHttpsMetadata = false;
                     //options.SaveToken = true;
                     options.TokenValidationParameters = new TokenValidationParameters
                     {
                         ValidateIssuerSigningKey = false,
-                        ValidateIssuer = false,                        
-                        ValidateAudience = false,                        
+                        ValidateIssuer = false,
+                        ValidateAudience = false,
                         SignatureValidator = (token, _) => new JwtSecurityToken(token),
-                        RoleClaimType = "cognito:groups",
+                        //RoleClaimType = "scope",
+                        NameClaimType = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier",
+                        RoleClaimTypeRetriever = (token, _) =>  
+                           (token as JwtSecurityToken).Claims.Any(c=>c.Type == "token_use" && c.Value == "access") ? "scope" : "cognito:groups"
+                        
 
                         //RequireExpirationTime = true,
                         //RequireSignedTokens = false,
