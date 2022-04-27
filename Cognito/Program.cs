@@ -26,7 +26,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 //                        RoleClaimType = "scope",
                         NameClaimType = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier",
                         RoleClaimTypeRetriever = (token, _) =>
-                           (token as JwtSecurityToken).Claims.Any(c => c.Type == "token_use" && c.Value == "access") ? "scope" : "cognito:groups"
+                           (token as JwtSecurityToken).Claims.Any(c => c.Type == "cognito:groups") ? "cognito:groups" : "scope"
 
 
                         //RequireExpirationTime = true,
