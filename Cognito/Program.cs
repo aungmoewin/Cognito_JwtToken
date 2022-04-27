@@ -23,15 +23,15 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                         ValidateIssuer = false,
                         ValidateAudience = false,
                         SignatureValidator = (token, _) => new JwtSecurityToken(token),
-//                        RoleClaimType = "scope",
+                        //                        RoleClaimType = "scope",
                         NameClaimType = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier",
                         RoleClaimTypeRetriever = (token, _) =>
-                           (token as JwtSecurityToken).Claims.Any(c => c.Type == "cognito:groups") ? "cognito:groups" : "scope"
+                           (token as JwtSecurityToken).Claims.Any(c => c.Type == "cognito:groups") ? "cognito:groups" : "scope",
 
 
-                        //RequireExpirationTime = true,
-                        //RequireSignedTokens = false,
-                        //ValidateLifetime = true,
+                        RequireExpirationTime = true,
+                        RequireSignedTokens = true,
+                        ValidateLifetime = true,
                         //ClockSkew = TimeSpan.Zero,
                     };
                 });
