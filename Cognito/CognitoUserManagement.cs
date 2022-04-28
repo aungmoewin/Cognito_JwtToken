@@ -3,189 +3,134 @@ using Amazon.CognitoIdentityProvider;
 using Amazon.CognitoIdentityProvider.Model;
 using Amazon.Runtime;
 using Amazon.Runtime.CredentialManagement;
+using System.Net;
 
-namespace Cognito
-{
-    public class CognitoUserManagement
-    {
-        private readonly AWSCredentials awsCredentials;
-        private readonly AmazonCognitoIdentityProviderClient adminAmazonCognitoIdentityProviderClient;
-        private readonly AmazonCognitoIdentityProviderClient anonymousAmazonCognitoIdentityProviderClient;
+namespace Cognito {
+    public class CognitoUserManagement {
+        private readonly AmazonCognitoIdentityProviderClient cognitoIdPClient;
 
-        public CognitoUserManagement(string profileName, RegionEndpoint regionEndpoint)
-        {
-            CredentialProfileStoreChain credentialProfileStoreChain = new CredentialProfileStoreChain();
+        public CognitoUserManagement(string profileName, RegionEndpoint regionEndpoint) {
+            var awsCredentials = new BasicAWSCredentials("", "");
+            cognitoIdPClient = new AmazonCognitoIdentityProviderClient(
+                awsCredentials,
+                RegionEndpoint.APSoutheast1);
 
-            if (credentialProfileStoreChain.TryGetAWSCredentials(profileName, out AWSCredentials internalAwsCredentials))
-            {
-                awsCredentials = internalAwsCredentials;
-                adminAmazonCognitoIdentityProviderClient = new AmazonCognitoIdentityProviderClient(
-                    awsCredentials,
-                    regionEndpoint);
-                anonymousAmazonCognitoIdentityProviderClient = new AmazonCognitoIdentityProviderClient(
-                    new AnonymousAWSCredentials(),
-                    regionEndpoint);
-            }
-            else
-            {
-                throw new ArgumentNullException(nameof(AWSCredentials));
-            }
         }
 
-        public async Task AdminCreateUserAsync(
+        public async Task<string?> CreateUser(
             string username,
             string password,
-            string userPoolId,
-            string appClientId,
-            List<AttributeType> attributeTypes)
-        {
-            AdminCreateUserRequest adminCreateUserRequest = new AdminCreateUserRequest
-            {
+            string userPoolId) {
+            var request = new AdminCreateUserRequest {
                 Username = username,
                 TemporaryPassword = password,
                 UserPoolId = userPoolId,
+                UserAttributes = new List<AttributeType> {
+                    new AttributeType {Name="name",  Value=username}
+                },
+                ForceAliasCreation = false,
+                MessageAction = MessageActionType.SUPPRESS,
+                DesiredDeliveryMediums = new List<string> { "EMAIL" },
+            };
+            var adminCreateUserResponse = await cognitoIdPClient
+                .AdminCreateUserAsync(request)
+                .ConfigureAwait(false);
+
+            if (adminCreateUserResponse.HttpStatusCode == HttpStatusCode.OK) {
+                await LinkProviderForUser(username, userPoolId);
+            }
+            return adminCreateUserResponse.User.Attributes.FirstOrDefault(a => a.Name == "sub")?.Value;
+
+        }
+
+        public async Task LinkProviderForUser(string username, string userPoolId) {
+            var request = new AdminLinkProviderForUserRequest {
+                DestinationUser = new ProviderUserIdentifierType {
+                    ProviderAttributeValue = username,
+                    ProviderName = "Cognito"
+                },
+                SourceUser = new ProviderUserIdentifierType {
+                    ProviderAttributeName = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress",
+                    ProviderAttributeValue = username,
+                    ProviderName = "Azure-AD"
+                },
+                UserPoolId = userPoolId,
+            };
+            await cognitoIdPClient
+                 .AdminLinkProviderForUserAsync(request)
+                 .ConfigureAwait(false);
+        }
+
+        public async Task UpdateUserAttributes(
+           string username,
+           string userPoolId,
+           List<AttributeType> attributeTypes) {
+
+            var request = new AdminUpdateUserAttributesRequest {
+                Username = username,
+                UserPoolId = userPoolId,
                 UserAttributes = attributeTypes
             };
-            AdminCreateUserResponse adminCreateUserResponse = await adminAmazonCognitoIdentityProviderClient
-                .AdminCreateUserAsync(adminCreateUserRequest)
-                .ConfigureAwait(false);
 
-            AdminUpdateUserAttributesRequest adminUpdateUserAttributesRequest = new AdminUpdateUserAttributesRequest
-            {
-                Username = username,
-                UserPoolId = userPoolId,
-                UserAttributes = new List<AttributeType>
-                    {
-                        new AttributeType()
-                        {
-                            Name = "email_verified",
-                            Value = "true"
-                        }
-                    }
-            };
-
-            AdminUpdateUserAttributesResponse adminUpdateUserAttributesResponse = adminAmazonCognitoIdentityProviderClient
-                .AdminUpdateUserAttributesAsync(adminUpdateUserAttributesRequest)
-                .Result;
-
-
-            AdminInitiateAuthRequest adminInitiateAuthRequest = new AdminInitiateAuthRequest
-            {
-                UserPoolId = userPoolId,
-                ClientId = appClientId,
-                AuthFlow = "ADMIN_NO_SRP_AUTH",
-                AuthParameters = new Dictionary<string, string>
-            {
-                { "USERNAME", username},
-                { "PASSWORD", password}
-            }
-            };
-
-            AdminInitiateAuthResponse adminInitiateAuthResponse = await adminAmazonCognitoIdentityProviderClient
-                .AdminInitiateAuthAsync(adminInitiateAuthRequest)
-                .ConfigureAwait(false);
-
-            AdminRespondToAuthChallengeRequest adminRespondToAuthChallengeRequest = new AdminRespondToAuthChallengeRequest
-            {
-                ChallengeName = ChallengeNameType.NEW_PASSWORD_REQUIRED,
-                ClientId = appClientId,
-                UserPoolId = userPoolId,
-                ChallengeResponses = new Dictionary<string, string>
-                    {
-                        { "USERNAME", username },
-                        { "NEW_PASSWORD", password }
-                    },
-                Session = adminInitiateAuthResponse.Session
-            };
-
-            AdminRespondToAuthChallengeResponse adminRespondToAuthChallengeResponse = adminAmazonCognitoIdentityProviderClient
-                .AdminRespondToAuthChallengeAsync(adminRespondToAuthChallengeRequest)
-                .Result;
+            await cognitoIdPClient
+               .AdminUpdateUserAttributesAsync(request)
+               .ConfigureAwait(false);
         }
 
-        public async Task AdminAddUserToGroupAsync(
+
+        public async Task AddUserToGroup(
             string username,
             string userPoolId,
-            string groupName)
-        {
-            AdminAddUserToGroupRequest adminAddUserToGroupRequest = new AdminAddUserToGroupRequest
-            {
+            string groupName) {
+            var request = new AdminAddUserToGroupRequest {
                 Username = username,
                 UserPoolId = userPoolId,
                 GroupName = groupName
             };
 
-            AdminAddUserToGroupResponse adminAddUserToGroupResponse = await adminAmazonCognitoIdentityProviderClient
-                .AdminAddUserToGroupAsync(adminAddUserToGroupRequest)
+            await cognitoIdPClient
+                .AdminAddUserToGroupAsync(request)
                 .ConfigureAwait(false);
         }
 
-        public async Task<AdminInitiateAuthResponse> AdminAuthenticateUserAsync(
-            string username,
-            string password,
-            string userPoolId,
-            string appClientId)
-        {
-            AdminInitiateAuthRequest adminInitiateAuthRequest = new AdminInitiateAuthRequest
-            {
-                UserPoolId = userPoolId,
-                ClientId = appClientId,
-                AuthFlow = "ADMIN_NO_SRP_AUTH",
-                AuthParameters = new Dictionary<string, string>
-            {
-                { "USERNAME", username},
-                { "PASSWORD", password}
-            }
-            };
-            return await adminAmazonCognitoIdentityProviderClient
-                .AdminInitiateAuthAsync(adminInitiateAuthRequest)
-                .ConfigureAwait(false);
-        }
-
-        public async Task AdminRemoveUserFromGroupAsync(
+        public async Task RemoveUserFromGroup(
             string username,
             string userPoolId,
-            string groupName)
-        {
-            AdminRemoveUserFromGroupRequest adminRemoveUserFromGroupRequest = new AdminRemoveUserFromGroupRequest
-            {
+            string groupName) {
+            var request = new AdminRemoveUserFromGroupRequest {
                 Username = username,
                 UserPoolId = userPoolId,
                 GroupName = groupName
             };
 
-            await adminAmazonCognitoIdentityProviderClient
-                .AdminRemoveUserFromGroupAsync(adminRemoveUserFromGroupRequest)
+            await cognitoIdPClient
+                .AdminRemoveUserFromGroupAsync(request)
                 .ConfigureAwait(false);
         }
 
-        public async Task AdminDisableUserAsync(
+        public async Task DisableUser(
             string username,
-            string userPoolId)
-        {
-            AdminDisableUserRequest adminDisableUserRequest = new AdminDisableUserRequest
-            {
+            string userPoolId) {
+            AdminDisableUserRequest adminDisableUserRequest = new AdminDisableUserRequest {
                 Username = username,
                 UserPoolId = userPoolId
             };
 
-            await adminAmazonCognitoIdentityProviderClient
+            await cognitoIdPClient
                 .AdminDisableUserAsync(adminDisableUserRequest)
                 .ConfigureAwait(false);
         }
 
-        public async Task AdminDeleteUserAsync(
+        public async Task DeleteUser(
             string username,
-            string userPoolId)
-        {
-            AdminDeleteUserRequest deleteUserRequest = new AdminDeleteUserRequest
-            {
+            string userPoolId) {
+            var request = new AdminDeleteUserRequest {
                 Username = username,
                 UserPoolId = userPoolId
             };
 
-            await adminAmazonCognitoIdentityProviderClient
-                .AdminDeleteUserAsync(deleteUserRequest)
+            await cognitoIdPClient
+                .AdminDeleteUserAsync(request)
                 .ConfigureAwait(false);
         }
     }

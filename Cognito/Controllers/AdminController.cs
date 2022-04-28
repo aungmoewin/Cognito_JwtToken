@@ -8,7 +8,7 @@ namespace Cognito.Controllers
     [Route("[controller]")]
     public class AdminController : ControllerBase
     {
-        [Authorize(Roles = "CVX/agency")]
+        [Authorize(Roles = "Admin")]
         [HttpGet]
         public Item Index()
         {
